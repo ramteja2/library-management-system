@@ -18,7 +18,7 @@ class BookViewSet(viewsets.ModelViewSet):
         count, _ = self.get_queryset().delete()
         return Response({"message": f"{count} books were deleted."}, status=status.HTTP_200_OK)
 
-# File upload view for books remains unchanged.
+# File upload view for books
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def upload_books(request):
@@ -31,10 +31,21 @@ def upload_books(request):
         ws = wb.active
 
         created_count = 0
+        # Assuming the first row is the header row.
         header = [cell.value for cell in ws[1]]
         
+        # Process each row after the header.
         for row in ws.iter_rows(min_row=2, values_only=True):
             data = dict(zip(header, row))
+            
+            # New rule: if ACC_NUM is empty, stop processing and return an error.
+            if not data.get("ACC_NUM"):
+                return Response(
+                    {"error": "ACC_NUM is required. Upload stopped."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Convert DATE and INV_DATE fields to the desired string format if they are datetime objects.
             if data.get("DATE") and isinstance(data["DATE"], datetime):
                 data["DATE"] = data["DATE"].strftime("%d-%m-%Y")
             if data.get("INV_DATE") and isinstance(data["INV_DATE"], datetime):
@@ -45,8 +56,12 @@ def upload_books(request):
                 serializer.save()
                 created_count += 1
             else:
+                # Stop processing on first error.
                 return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response({"message": f"File uploaded successfully. {created_count} books added."}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"message": f"File uploaded successfully. {created_count} books added."},
+            status=status.HTTP_201_CREATED
+        )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
